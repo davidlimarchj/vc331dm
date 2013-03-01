@@ -1,0 +1,14 @@
+Functional:
+{char a char b b = 2 a = b P("aabd") P(2+a)}
+{{}}
+a = ""
+{P(2)}{P(3)}
+
+Not functional:
+int 2
+P(a+2)
+2 = a
+{char ? char b b = 2 a = b P("aabd") P(2+a)}
+{char a char b = 2 a = b P("aabd") P(2+a)}
+{2+1
+{2}{3}
