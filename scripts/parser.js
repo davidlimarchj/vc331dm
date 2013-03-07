@@ -8,7 +8,7 @@
     
     function parse(verbose)
     {
-	levelIn++;
+    levelIn++;
 	
 	//Initialize gloal vars
 	errorCount = 0;
@@ -22,21 +22,21 @@
         tree = parseProgram();
 	
         //Report the results.
-        putMessage("Parsing Completed");
+        putMessage("Parsing Completed with "+errorCount+" errors.");
 	    
-	if(tree.type != "B_error") //No errors
-	    {
-		putMessage("Program was syntactically valid");
+//	if(tree.type != "B_error") //No errors
+	  //  {
+	//	putMessage("Program was syntactically valid");
 		levelIn--;
 		printParseTree();
 		printSymbolTable();
-	    }
-	else //Encountered an error
-	    {
-		putMessage("Program was not syntactically valid");
-		levelIn--;
+	//    }
+//	else //Encountered an error
+	 //   {
+	//	putMessage("Program was not syntactically valid");
+	//	levelIn--;
 		errorHandler();
-	    }
+	  //  }
 	
 	return tree;
     }
@@ -67,12 +67,12 @@
 	else //Statement did not match
 		result = new B_error("B_program","Start to a program", statementParse.found, statementParse.size);
 
-	var dollarMatch = matchToken("T_dollar", index);
-	if(dollarMatch.type == "T_errorP") //The dollar was not parsed correctly
+	var EOFMatch = matchToken("T_EOF", index);
+	if(EOFMatch.type == "T_errorP") //There is code after we should be done parsing
 	{
-		putMessage("Warning: Expected a dollar sign at the end of the program");
-		if(dollarMatch.attempt != "T_EOF") //We didn't reach the end of the file in our parsing
-			putMessage(" |--> Found: " + tokens[index].type);
+		putMessage("Error: Found extra code at "+EOFMatch.line+":"+EOFMatch.column+". Discarded");
+        errorCount++;
+    	errors.push(new B_error("B_Program", "Nothing", EOFMatch, 1));
 	}
 	
 	if(verb)
@@ -80,7 +80,7 @@
 		if(result.type == "B_error")
 			putMessage("Not a valid program");
 		else
-			putMessage("Program parsed with "+result.size+" significant tokens");
+			putMessage("Program parsed with "+result.size+" tokens");
 	}
 	
 	levelIn--;
@@ -111,10 +111,11 @@
 			result = parseStatementListState(index);
 			break;
 		default: //None of those matched
-			putMessage("Error: Expected the start to a statement at " +currToken.line+ ":" +currToken.column+". Found " +currToken.type +". Will skip.")
+			putMessage("Error: Expected the start to a statement at " +currToken.line+ ":" +currToken.column+". Found " +currToken.type +".");
 			errorCount++;
-			errors.push(new B_error("B_statement", "Start to a statement", currToken, 1));
-			result = parseStatement(index+1);
+            var currError = new B_error("B_statement", "Start to a statement", matchToken("start to a statement", index), 1);
+			errors.push(currError);
+			result = currError;
 			break;
 		}
 	
@@ -131,8 +132,8 @@
 	return result;
     }
 
-    
-    function parsePrintState(index)
+  
+function parsePrintState(index)
     {
 	levelIn++;
 	if(verb)
@@ -146,9 +147,9 @@
 	var openParenMatch = matchToken("T_openParen", index);
 	if(openParenMatch.type =="T_errorP")//The next token is not an open paren. Assume it's missing
 	{
-		putMessage("Error: Expected an open parenthesis after the print operator. Found "+openParenMatch.found.type+" at " openParenMatch.found.line+":"+openParenMatch.found.column+"Will attempt to continue parsing");
-		//errorCount++;
-		//errors.push(new B_error("B_printState", "T_openParen", openParenMatch, 1));
+		putMessage("Error: Expected an open parenthesis after the print operator. Found "+openParenMatch.found.type+" at " +openParenMatch.found.line+":"+openParenMatch.found.column+"Will attempt to continue parsing");
+		errorCount++;
+		errors.push(new B_error("B_printState", "T_openParen", openParenMatch, 1));
 	}
 	else
 		index++; //skip the open paren
@@ -158,16 +159,16 @@
 	
 	var closeParenMatch = matchToken("T_closeParen", index);
 	index++;
-	if(closeParenMatch.type =="T_errorP"))//The next token is not a close paren. Look for the next close paren and throw out anything in between
+	if(closeParenMatch.type =="T_errorP")//The next token is not a close paren. Look for the next close paren and throw out anything in between
 	{
-		putMessage("Error: Expected a close parenthesis after the statement. Found "+closeParenMatch.found.type+" at "+closeParenMatch.found.line+":"closeParenMatch.found.column);
+		putMessage("Error: Expected a close parenthesis after the statement. Found "+closeParenMatch.found.type+" at "+closeParenMatch.found.line+":"+closeParenMatch.found.column);
 		errorCount++;
 		errors.push(new B_error("B_printState", "T_closeParen", closeParenMatch, 1));
 		
-		var nextClose = findNext("T_closeParen",index);
+		var nextClose = findNext("T_closeParen","T_openParen",index);
 		if(nextClose != -1)
 		{
-			putMessage("   Found a close parenthesis at"+tokens[nextClose].line+ ":"+tokens[nextClose].column+". Will resume parsing from there");
+			putMessage("   Found a close parenthesis at "+tokens[nextClose].line+ ":"+tokens[nextClose].column+". Will resume parsing from there");
 			index = nextClose+1;
 		}
 		else //There are no more close parens
@@ -190,8 +191,8 @@
 	return result;
 }
 
-/*
-    function parseIdState(index)
+
+function parseIdState(index)
     {
 	levelIn++;
 	if(verb)
@@ -219,16 +220,16 @@
 		errorCount++;
 		errors.push(new B_error("B_printState", "T_closeParen", equalMatch, 1));
 		
-		var nextEqual = findNext("T_equal",index);
+		/*var nextEqual = findNext("T_equal","",index);
 		if(nextEqual != -1)
 		{
-			putMessage("   Found an equal sign at"+tokens[nextEqual].line+ ":" tokens[nextEqual].column". Will resume parsing from there");
+			putMessage("   Found an equal sign at "+tokens[nextEqual].line+ ":"+tokens[nextEqual].column+". Will resume parsing from there");
 			index = nextEqual+1;
 		}
 		else //There are no more equal signs
 		{
 			putMessage("   Did not find an equal sign for the variable assignment. Will assume equal sign was forgotten");
-		}
+		}*/
 	}
 	
 	var exprParse = parseExpr(index);
@@ -239,7 +240,7 @@
 		errorCount++;
 		errors.push(new B_error("B_idState", "B_expr", exprParse, exprParse.size));
 	}
-	else if(validID) //There is a valid id and expr, attempt to go through with the assignment
+	else if(validId) //There is a valid id and expr, attempt to go through with the assignment
 	{
 		var ident = idParse.idT.inside;
 		var value = exprParse;
@@ -251,8 +252,8 @@
 		}
 		else //This is a previously unseen variable, cannot be assigned until it is declared
 		{
-			putMessage("Found undeclared variable assignment at " + idParse.line +":" +idParse.column);
-			errors.push(new B_error("B_idState", "Declared user id", idParse, idParse.size));
+			putMessage("Found undeclared variable assignment at " + idParse.idT.line +":" +idParse.idT.column);
+			errors.push(new B_error("B_idState", "Declared user id", new T_errorP("declared user id", idParse.idT), idParse.size));
 			errorCount++;
 			//var newVar = new variable(undefined, value);
 			//symTable.setItem(ident, newVar); //Put the new symbol back in the table
@@ -302,14 +303,14 @@ function parseVarDecl(index)
 	index+= idParse.size;
 	if(idParse.type == "B_error") // This was not a valid id
 	{
-		putMessage("Error: Expected a user id. Found "+idParse.found.type+"at "+idParse.found.line+":"+idParse.found.column". Will attempt to continue parsing");
+		putMessage("Error: Expected a user id. Found "+idParse.found.type+"at "+idParse.found.line+":"+idParse.found.column+". Will attempt to continue parsing");
 		errorCount++;
 		errors.push(new B_error("B_varDecl", "T_userId", idParse, idParse.size));
 	}
 	else if(validId) // this is a valid variable declaration. Add to the symbol table
 	{
-		var ident = idParse.idT.inside
-		var type = typeMatch.inside
+		var ident = idParse.idT.inside;
+		var type = typeMatch.inside;
 			
 		if(symTable.hasItem(ident))
 		{
@@ -350,14 +351,16 @@ function parseStatementListState(index)
 	var result;
 	var startIndex = index;
 	index++; //skip the open squiggly bracket that has already been read
-	var nextClose = findNext("T_closeSBracket",index);
+	var nextClose = findNext("T_closeSBracket","T_openSBracket",index);
 	    
 	var statementListParse;
 	if(nextClose != -1)
 	{
 		statementListParse = parseStatementList(index, nextClose);
 		index+= statementListParse.size;
-	else //There are no more close parens
+        index++; //For the close SBracket
+	}
+	else //There are no more close Sbrackets
 	{
 		putMessage("Error: Did not find a close Sbracket for statement list. Will assume it was forgotten");
 		statementListParse = parseStatementList(index, tokens.length-2); //Treat the rest of the program as a statementlist except for the EOF token
@@ -397,12 +400,12 @@ function parseStatementList(index, end)
 		
 		var statementParse = parseStatement(index);
 		index+= statementParse.size;
-		if(statementParse.type == "B_error")// This code is not a statement. Try to parse the rest of the list
+		/*if(statementParse.type == "B_error")// This code is not a statement. Try to parse the rest of the list
 		{
 			putMessage("Error: Expected a statement as part of a statement list. Found "+statementParse.found.type+" at "+statementParse.found.line+":"+statementParse.found.column);
 			errorCount++;
 			errors.push(new B_error("B_statementList", "B_statement", statementParse, statementParse.size));
-		}
+		}*/
 		
 		var statementListParse = parseStatementList(index, end);
 		index+= statementListParse.size;
@@ -415,6 +418,8 @@ function parseStatementList(index, end)
 									statementParse,
 									statementListParse));
 	}
+    else //We've reached the end of the list
+        result = (new B_statementList(0,"",""));
 	
 	if(verb)
 	{
@@ -449,10 +454,11 @@ function parseExpr(index)
 			result = parseId(index);
 			break;
 		default: //None of those matched
-			putMessage("Error: Expected the start to an expr at " +currToken.line+ ":" +currToken.column+". Found " +currToken.type +". Will skip.")
+			putMessage("Error: Expected the start to an expr at " +currToken.line+ ":" +currToken.column+". Found " +currToken.type +".")
 			errorCount++;
-			errors.push(new B_error("B_expr", "Start to an expr ", currToken, 1));
-			result = parseExpr(index+1);
+            var currError = new B_error("B_expr", "Start to an expr ", matchToken("start to an expr", index), 1)
+			errors.push(currError);
+			result = currError;
 			break;
 	}
 	
@@ -503,7 +509,7 @@ function parseExpr(index)
 		result = (new B_intExprWOp(index-startIndex,
 									digitMatch,
 									opMatch,
-									exprParse))
+									exprParse));
 	}
 	else //Found a digit with no operator following it
 	{
@@ -533,13 +539,14 @@ function parseExpr(index)
 	var startIndex = index;
 	index++; //skip the open qoute that has already been read
 	    
-	var nextQoute = findNext("T_qoute", index);
-	    
+	var nextQoute = findNext("T_qoute","", index);
 	var charExprParse;
 	if(nextQoute != -1)
 	{
-		charExprParse = parseStatementList(index, nextQoute);
+		charExprParse = parseCharList(index, nextQoute);
 		index+= charExprParse.size;
+        index++; //For the close qoute
+	}
 	else //There are no more qoutes
 	{
 		putMessage("Error: Did not find a close qoute for char list. Will assume it was forgotten");
@@ -572,7 +579,6 @@ function parseCharList(index, end)
 		putMessage("Attempting to parse char list");
     
 	var result;
-	var errorDepth = 0;
 	var startIndex = index;
 
 	if(index != end) //The list hasn't been fully parsed
@@ -582,7 +588,7 @@ function parseCharList(index, end)
 		
 		var charMatch = matchToken("T_char", index);
 		index++;
-		if(charMatch.type != "T_errorP")// This is not a valid char. Try to parse the rest of the list
+		if(charMatch.type == "T_errorP")// This is not a valid char. Try to parse the rest of the list
 		{
 			putMessage("Error: Expected a char as part of a char list. Found "+charMatch.found.type+" at "+charMatch.found.line+":"+charMatch.found.column);
 			errorCount++;
@@ -591,7 +597,7 @@ function parseCharList(index, end)
 		
 		var charListParse = parseCharList(index, end);
 		index+= charListParse.size;
-		if(statementListParse.type == "B_error") //This is not a valid statement list. Leave this reccursive madness!
+		if(charListParse.type == "B_error") //This is not a valid statement list. Leave this reccursive madness!
 		{
 			result = new B_error("B_charList", "B_charList", charListParse, charListParse.size);
 		}
@@ -600,7 +606,9 @@ function parseCharList(index, end)
 									charMatch,
 									charListParse));
 	}
-	
+    else //We've reached the end of the list
+	    result = (new B_charList(0,"",""));
+        
 	if(verb)
 	{
 		if(result.type == "B_error")
@@ -625,7 +633,6 @@ function parseId(index)
 	if(charMatch.type != "T_errorP") // This is a valid type
 		result = new B_id(1, charMatch);
 	else //Not a match
-	    {
 		result =new B_error("B_id", "T_userId", charMatch, 1);
 
 	if(verb)
@@ -640,7 +647,7 @@ function parseId(index)
 	return result;
     }
 
-   */ 
+   
 //Utilities
     function matchToken(type, index)
     {
@@ -656,13 +663,15 @@ function parseId(index)
 	else
 	{
 		//Regular Expressions of acceptable general search types
-		var operationRege = /T_[plus|sub]/;
+		var operationRege = /T_plus|sub/;
 		switch(type)
 		{
 		case "_op":   
 			if(operationRege.test(token.type))
+            {
 				result = token;
-			else
+            }
+            else
 				result = new T_errorP(type, token);
 			    break;
 		default:        
@@ -675,18 +684,28 @@ function parseId(index)
 	return result;
     }
     
-    function findNext(searchType, index)
+    function findNext(searchType, nestingType, index)
     {
 	var location = -1;
+    var nestlevel = 0;
 	var i = index;
 	while(i<tokens.length && location ==-1)
 	{
-		if(tokens[i].type == searchType)
+		if(tokens[i].type == nestingType)
+    	{
+			nestlevel++;
+		}
+        if(tokens[i].type == searchType)
 		{
-			location = i
+            if(nestlevel > 0) //This is not the matching pair
+                nestlevel--;
+            else
+			    location = i;
 		}
 		i++;
 	}
+    
+    return location;
     }
     
 
@@ -768,17 +787,23 @@ function B_error(step, expected, found, size)
 	this.expected = expected;
 	this.found = found;
 	this.size = size;
+    this.line = found.line;
+    this.column = found.column
 	this.type ="B_error";
+    this.base = found.base
    }
     
     
 //Parse Error Token
-function T_errorP(attempt, found)
+function T_errorP(expected, found)
    {
 	this.type ="T_errorP";
 	this.depth = 0;
-	this.attempt = attempt;
+	this.expected = expected;
 	this.found = found;
+    this.line = found.line;
+    this.column = found.column;
+    this.base = found;
    }
     
    
@@ -888,7 +913,7 @@ function printTree(tree, indent)
 	
 	var root = tree.type;
 	   
-	if(/T_[userId|type|digit|char]/.test(root))//This is one of the tokens with extra information
+	if(/userId|type|digit|char/.test(root))//This is one of the tokens with extra information
 		result += "[" + root + "]---"+tree.inside+"\n";
 	else
 		result += "[" + root + "]\n";
@@ -919,7 +944,6 @@ function printTree(tree, indent)
 				}
 				break;
 			case "B_intExpr":
-				putMessage("gotHere");
 				result += printTree(tree.inner,indent+1);
 				break;
 			case "B_intExprWOp":
@@ -953,21 +977,33 @@ function printSymbolTable()
 {
 	var identifiers = symTable.keys();
 	var varObjs = symTable.values();
+    var returnText ="";
 	
-	putMessage("Symbol Table:");
-	putMessage("Identifier |Type        |Value");
+	returnText +="Symbol Table:\n";
+	returnText +="Identifier |Type        |Value\n";
 	
 	for(var i=0;i<identifiers.length;i++){
-			putMessage(""+identifiers[i] + "           "+ varObjs[i].type +"     " +varObjs[i].value.type);
+			returnText +=""+identifiers[i] + "           "+ varObjs[i].type +"     " +varObjs[i].value.type+"\n";
 	}
+    putMessage(returnText);
 }
-	
 	
 function errorHandler()
 {
+	putMessage("Error List:");
+	
+	for(var i=0;i<errors.length;i++){
+        var currError =errors[i];
+        if(/userId|type|digit|char/.test(currError.base.type))//This is one of the tokens with extra information
+    	    putMessage("At "+currError.line+":"+currError.column + " Expected: "+ currError.expected +". Found: " +currError.base.inside);
+        else
+		    putMessage("At "+currError.line+":"+currError.column + " Expected: "+ currError.expected +". Found: " +currError.base.type);
+	}
+}	
+/*function errorHandler()
+{
 	putMessage("\nError Tree: ");
-	var bottom = errorHandlerHelper(tree, 0);
-	putMessage("Found "+ bottom.found.type+ " where expected " + bottom.attempt+". Around line " + bottom.found.line+" column "+ bottom.found.column);
+	var bottom = errorHandlerHelper(tree, 0);;
 }
 
 function errorHandlerHelper(tree, indent)
@@ -983,9 +1019,7 @@ function errorHandlerHelper(tree, indent)
 		putMessage(branch);
 		return errorHandlerHelper(tree.block, indent+1);
 	}
-}
-
-
+}*/
 
 /*
 function parseIntExprWOp(index)

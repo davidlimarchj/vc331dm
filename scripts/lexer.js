@@ -1,4 +1,4 @@
-	/* lexer.js  */
+    /* lexer.js  */
 
 	var verb;
 	var tokens;
@@ -25,9 +25,10 @@
 		if(verb)
 			putMessage("Source Code Tokenized");
 		putMessage("Lex Error Count: " + errorCount);
-		    
+		
 		levelIn--;
 		var lexReturnText = "Lex returned [";
+        
 		for(var i=0;i<tokens.length;i++)
 		{
 			lexReturnText += "[" + tokens[i].type + "]";
@@ -69,8 +70,8 @@
 					    }
 					if(verb)
 					{
+                        putMessage("At " + line + ":"+ column);
 						putMessage("Starting Lex Analysis of: " + arr[i]);
-						putMessage("At " + line + ":"+ column);
 					}
 					if(!inQoutes) //Not currently in between qoutation mark
 					{
@@ -182,7 +183,7 @@ function symbolAnalysis(input, line, column)
 	else if(input == "+") //Plus operator
             return new T_plus(line, column);
         else if(input == "-") //Sub operator
-            return T_sub(line, column);
+            return new T_sub(line, column);
         else if(input == "(") //Open Parenthesis
             return new T_openParen(line, column);
         else if(input == ")") //Close Parenthesis
@@ -270,7 +271,7 @@ function T_print(line, column)
 
    function T_sub(line, column)
    {
-	   this.type ="T_sub";
+       this.type ="T_sub";
 	this.line = line;
 	this.column = column;
 	   if(verb)
@@ -321,7 +322,7 @@ function T_print(line, column)
 	this.line = line;
 	this.column = column;
 	   if(verb)
-		putMessage("User Id Token Created");
+		putMessage("User Id Token Created with value " + str);
    }
    
    function T_type(str, line, column)
@@ -342,7 +343,7 @@ function T_print(line, column)
 	this.line = line;
 	this.column = column;
 	   if(verb)
-		putMessage("Digit Token Created");
+		putMessage("Digit Token Created with value " + ident);
    }
    
     function T_char(ident, line, column)
@@ -352,7 +353,7 @@ function T_print(line, column)
 	this.line = line;
 	this.column = column;
 	   if(verb)
-		putMessage("Char Token Created");
+		putMessage("Char Token Created with value " + ident);
    }
    
        function T_BOF()

@@ -1,4 +1,4 @@
-﻿<!DOCTYPE HTML>
+<!DOCTYPE HTML>
 <html>
 <head>
     <title>My Compiler</title>
@@ -19,7 +19,7 @@ Statement     ::== P(Expr)
               ::== { StatementList }
 
 StatementList ::== Statement StatementList
-	      ::== ε
+          ::== ε
 Expr          ::== IntExpr
               ::== CharExpr
               ::== Id
@@ -37,14 +37,14 @@ op            ::== + | -
     </pre>
 <form>
 <input type="checkbox" id="lexVerb">Verbose Lexer
-<input type="checkbox" id="parseVerb" checked="checked">Verbose Parser
+<input type="checkbox" id="parseVerb">Verbose Parser
 </form>
     <div>
-        <textarea id="taSourceCode" cols="100" rows="18">P("abc")$</textarea>
+        <textarea id="taSourceCode" cols="130" rows="18"></textarea>
         <br>
         <input type="button" id="btnCompile" value="Compile" onclick="btnCompile_click();"/>
         <br>
-        <textarea id="taOutput" cols="100" rows="22"></textarea>
+        <textarea id="taOutput" cols="130" rows="22"></textarea>
     </div> 
     <!-- Footer -->
     <p>
