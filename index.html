@@ -40,7 +40,7 @@ op            ::== + | -
 <input type="checkbox" id="parseVerb" checked="checked">Verbose Parser
 </form>
     <div>
-        <textarea id="taSourceCode" cols="100" rows="18">{char a char b b = 2 a = b P("aabd") P(2+a)}</textarea>
+        <textarea id="taSourceCode" cols="100" rows="18">P("abc")$</textarea>
         <br>
         <input type="button" id="btnCompile" value="Compile" onclick="btnCompile_click();"/>
         <br>
@@ -86,6 +86,8 @@ op            ::== + | -
         putMessage("Compilation Started");
         // Grab the tokens from the lexer . . .
         tokens = lex(lexVerb);
+	
+	//Parse them
 	CST = parse(parseVerb);
 	putMessage("\nCompilation Finished");
     }

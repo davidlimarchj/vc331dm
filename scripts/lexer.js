@@ -1,11 +1,17 @@
 	/* lexer.js  */
 
 	var verb;
-	var tokens = new Array();
-	var errorCount =0;
+	var tokens;
+	var errorCount;
+	var foundEOF;
 	
 	function lex(verbose)
 	    {
+		//Initialize global vars
+		tokens = new Array();
+		errorCount =0;
+		foundEOF = false;
+		    
 		levelIn++;
 		putMessage("Entered Lex");
 		 //Activate or deactive verbose mode
@@ -19,7 +25,6 @@
 		if(verb)
 			putMessage("Source Code Tokenized");
 		putMessage("Lex Error Count: " + errorCount);
-		
 		    
 		levelIn--;
 		var lexReturnText = "Lex returned [";
@@ -35,12 +40,12 @@
 
 		function scannerTokenizer(str)
 		{
+			
 			levelIn++;
 			
 			var arr = str.split("");
 			var tokenList = new Array();
 			var identifierList = new Array();
-			var onWhiteSpace = true;
 			var inQoutes = false;
 			var line = 0; //Tracks line number
 			var column = 0; //Tracks column number
@@ -52,118 +57,122 @@
 			var digitRege = /[0-9]/;
 			
 			tokenList.push(new T_BOF());
+			var i = 0;
 			
-			for(var i=0;i<arr.length;i++)
+			while((i<arr.length && !foundEOF))
 			{
-				var offset = 0;
-				if(arr[i] == "\n")
-				    {
-					line++;
-					column = 0;
-				    }
-				if(verb)
-				{
-					putMessage("Starting Lex Analysis of: " + arr[i]);
-					putMessage("At " + line + ":"+ column);
-				}
-				if(!inQoutes) //Not currently in between qoutation mark
-				{
+					//var offset = 0;
+					if(arr[i] == "\n")
+					    {
+						line++;
+						column = 0;
+					    }
 					if(verb)
-						putMessage("Not in qoutes");
-					if (wsRege.test(arr[i])) //Whitespace
 					{
-						if(verb)
-							putMessage("Encountered whitespace");	
-							column++;
+						putMessage("Starting Lex Analysis of: " + arr[i]);
+						putMessage("At " + line + ":"+ column);
 					}
-					else if(symbolRege.test(arr[i])) //Acceptable Symbols
+					if(!inQoutes) //Not currently in between qoutation mark
 					{
 						if(verb)
-							putMessage("Encountered Symbol");
-						if(arr[i] == '\}') //Close Sbracket, have to insert epsilon token
-							tokenList.push(new T_epsilon(line,column));
-						if(arr[i] == '"') //Open qoute, toggle flag
-							inQoutes = true;
-					    tokenList.push(symbolAnalysis(arr[i], line, column));
-					    column++;
-					    onWhiteSpace = false;
-					}
-					else if( charRege.test(arr[i])) //Identifiers
-					{
-						if(verb)
-							putMessage("Found identifier");
-						//find where the next whitespace is to delimite the identifier
-						identLen = str.substring(i).search(new RegExp (wsRege.source + "|" + symbolRege.source));
-						if(identLen == -1)
+							putMessage("Not in qoutes");
+						if (wsRege.test(arr[i])) //Whitespace
 						{
-							tokenList.push(identifierAnalysis(str.substring(i), line, column)); //End of file
-							identLen = str.length - i;
+							if(verb)
+								putMessage("Encountered whitespace");	
+								column++;
+						}
+						else if(symbolRege.test(arr[i])) //Acceptable Symbols
+						{
+							if(verb)
+								putMessage("Encountered Symbol");
+							if(arr[i] == '"') //Open qoute, toggle flag
+								inQoutes = true;
+						    tokenList.push(symbolAnalysis(arr[i], line, column));
+						    column++;
+						}
+						else if(charRege.test(arr[i])) //Identifiers
+						{
+							if(verb)
+								putMessage("Found identifier");
+							//find where the next whitespace is to delimite the identifier
+							identLen = str.substring(i).search(new RegExp (wsRege.source + "|" + symbolRege.source));
+							if(identLen == -1)
+							{
+								tokenList.push(identifierAnalysis(str.substring(i), line, column)); //End of file
+								identLen = str.length - i;
+							}
+							else
+							{
+								tokenList.push(identifierAnalysis(str.substring(i, i+identLen), line, column));
+							}
+							i += identLen-1; //move the scanner index ahead by the length of the identifier
+							column = column + identLen;
+											
+						}
+						else if(digitRege.test(arr[i])) //Digits's
+						{
+							if(verb)
+								putMessage("Found digit");
+							tokenList.push(new T_digit(arr[i], line, column));
+							column++;
+							onWhiteSpace = false;
 						}
 						else
 						{
-							tokenList.push(identifierAnalysis(str.substring(i, i+identLen), line, column));
+							if(verb)
+								putMessage("Unidentified input " + arr[i] + " on " + line + ":" + column );
+							tokenList.push(new T_error(arr[i], line, column));
+							errorCount++;
+							column++;
 						}
-						i += identLen-1; //move the scanner index ahead by the length of the identifier
-						column = column + identLen;
-						onWhiteSpace = false;
-										
-					}
-					else if(digitRege.test(arr[i])) //Digits's
+				    }
+				    else //Current in between qoutation marks
+				    {
+					    if(verb)
+						putMessage("In between qoutes");
+					if(arr[i] == '"') //Close Qoute
 					{
 						if(verb)
-							putMessage("Found digit");
-						tokenList.push(new T_digit(arr[i], line, column));
-						column++;
-						onWhiteSpace = false;
+						putMessage("Found close qoutes");
+					    tokenList.push(new T_qoute(line, column));
+					    inQoutes = false;
+					    column++;
 					}
-					else
+					else if( charRege.test(arr[i])) //Chars
 					{
 						if(verb)
-							putMessage("Unidentified input " + arr[i] + " on " + line + ":" + column );
-						tokenList.push(new T_error(arr[i], line, column));
-						errorCount++;
-						column++;
-					    onWhiteSpace = false;
-						
+							putMessage("Found char in qoutes");
+					tokenList.push(new T_char(arr[i],line, column));
+					column++;
 					}
-			    }
-			    else //Current in between qoutation marks
-			    {
-				    if(verb)
-					putMessage("In between qoutes");
-				if(arr[i] == '"') //Close Qoute
-				{
-					if(verb)
-					putMessage("Found close qoutes");
-					tokenList.push(new T_epsilon(line,column));
-				    tokenList.push(new T_qoute(line, column));
-				    inQoutes = false;
-				    column++;
-				    onWhiteSpace = false;
+					else //Error
+					{
+						if(verb)
+							putMessage("Found a non char in between qoutes");
+						tokenList.push(new T_error(arr[i],line, column));
+						column++;
+					}
 				}
-				else if( charRege.test(arr[i])) //Chars
-				{
-					if(verb)
-						putMessage("Found char in qoutes");
-				tokenList.push(new T_char(arr[i],line, column));
-				column++;
-				onWhiteSpace = true;
-				}
-				else //Error
-				{
-					if(verb)
-						putMessage("Found a non char in between qoutes");
-				}
-			    }
+			    
+			    i++;
 			}
 			
-			tokenList.push(new T_EOF(line, column));
+			if(!foundEOF)
+			{
+				putMessage("Warning: Expected a dollar sign at the end of the program. Added for you");
+				tokenList.push(new T_EOF(line, column));
+			}
+			else if(i < arr.length)
+			{
+				putMessage("Warning: Found code after the dollar sign. Ignored.");
+			}
 			
 			levelIn--;
-			return tokenList
+			return tokenList;
 		}
 		
-		
+
 function symbolAnalysis(input, line, column)
     {
         if(input == "P") //Print operator
@@ -183,13 +192,12 @@ function symbolAnalysis(input, line, column)
         else if(input == "}") //Close Squiggly Brace
             return new T_closeSBracket(line, column);
 	else if(input == "$") //Dollar Sign (End of program symbol)
-            return new T_dollar(line, column);
+            return new T_EOF(line, column);
 	else if(input == '"') //Qoute
             return new T_qoute(line, column);
         else //Error Case
         {
             putMessage("Unidentified charcter found on " + line + ":" + column );
-		errorCount++;
             return new T_error(input, line, column);
         }
     }
@@ -305,14 +313,6 @@ function T_print(line, column)
 		putMessage("Close Squiggly Bracket Token Created");
    }
    
-   function T_dollar(line, column)
-   {
-	this.type ="T_dollar";
-	this.line = line;
-	this.column = column;
-	   if(verb)
-		putMessage("Dollar Token Created");
-   }
    
     function T_userId(str, line, column)
    {
@@ -367,7 +367,8 @@ function T_print(line, column)
 	this.type ="T_EOF";
 	this.line = line;
 	this.column = column;
-	   if(verb)
+	foundEOF = true;
+	if(verb)
 		putMessage("End of File Token Created");
    }
    
@@ -377,16 +378,8 @@ function T_print(line, column)
 	this.inside = ident;
 	this.line = line;
 	this.column = column;
-	errorCount++;
+	   errorCount++;
 	if(verb)
 		putMessage("Error Token Created");
    }
    
-function T_epsilon(line, column)
-   {
-	this.type ="T_epsilon";
-	this.line = line;
-	this.column = column;
-	if(verb)
-		putMessage("Epsilon Token Created");
-   }

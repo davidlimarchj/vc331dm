@@ -4,6 +4,14 @@ Functional:
 a = ""
 {P(2)}{P(3)}
 
+{}
+{{{}}}$
+{{}{{{}}}}$
+P("a")$
+a = 1$
+P("inta")$
+
+
 Not functional:
 int 2
 P(a+2)
@@ -12,3 +20,9 @@ P(a+2)
 {char a char b = 2 a = b P("aabd") P(2+a)}
 {2+1
 {2}{3}
+"$"$
+"no spaces"$
+thisisnotaprogram$
+"two
+lines"$
+char 1$

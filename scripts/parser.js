@@ -2,11 +2,17 @@
     var tree;
     var verb;
     var symTable;
+    var errorCount;
+    var errors;
     
     
     function parse(verbose)
     {
 	levelIn++;
+	
+	//Initialize gloal vars
+	errorCount = 0;
+	errors = new Array();
 	    
 	verb = verbose;
 	tree = "";
@@ -34,7 +40,7 @@
 	
 	return tree;
     }
-    
+
      function parseProgram()
     {
 	levelIn++;
@@ -59,7 +65,7 @@
 		index+= statementParse.size;
 	}
 	else //Statement did not match
-		result = new B_error("B_program",statementParse, statementParse.depth);
+		result = new B_error("B_program","Start to a program", statementParse.found, statementParse.size);
 
 	var dollarMatch = matchToken("T_dollar", index);
 	if(dollarMatch.type == "T_errorP") //The dollar was not parsed correctly
@@ -86,42 +92,31 @@
 	levelIn++;
 	if(verb)
 		putMessage("Attempting to parse statement");
+	    
 	var result;
 	    
-	printParse = parsePrintState(index);
-	if(printParse.type != "B_error") //There is a working print statement match
-	{
-		result = printParse;
-	}
-	else 
-	{
-	    idParse = new parseIdState(index);
-	
-	    if(idParse.type != "B_error") //There is a working id statement match
-	   {
-		result = idParse;
-	   }
-	else
-	   {
-	    var varDeclParse = parseVarDecl(index);
-	    if(varDeclParse.type != "B_error") //There is a working Var Decl statement match
-	    {
-		result = varDeclParse;
-	    }
-	else
-	    {
-	    var statementListParse = parseStatementListState(index);
-	    if(statementListParse.type != "B_error") //There is a working statement list match
-	    {
-		result = statementListParse;
-	    }
-	else //nothing matches
-	    {
-	    var errors = [printParse,idParse,varDeclParse,statementListParse];
-	    var likely = errorDepthAnalysis(errors);
-		result = new B_error("B_statement", likely, likely.depth);
-	    }
-    }}}
+	//Try to parse
+	currToken = tokens[index];
+	switch(currToken.type){
+		case "T_print":
+			result = parsePrintState(index);
+			break;
+		case "T_userId":
+			result = parseIdState(index);
+			break;
+		case "T_type":
+			result = parseVarDecl(index);
+			break;
+		case "T_openSBracket":
+			result = parseStatementListState(index);
+			break;
+		default: //None of those matched
+			putMessage("Error: Expected the start to a statement at " +currToken.line+ ":" +currToken.column+". Found " +currToken.type +". Will skip.")
+			errorCount++;
+			errors.push(new B_error("B_statement", "Start to a statement", currToken, 1));
+			result = parseStatement(index+1);
+			break;
+		}
 	
 	
 	if(verb)
@@ -135,6 +130,7 @@
 	levelIn--;
 	return result;
     }
+
     
     function parsePrintState(index)
     {
@@ -143,52 +139,50 @@
 		putMessage("Attempting to parse print statement");
 	
 	var result;
-	var errorDepth =0;
 	var startIndex = index;
+	index++; //skip the P that has already been read
 	
-	var printMatch = matchToken("T_print", index);
+	
+	var openParenMatch = matchToken("T_openParen", index);
+	if(openParenMatch.type =="T_errorP")//The next token is not an open paren. Assume it's missing
+	{
+		putMessage("Error: Expected an open parenthesis after the print operator. Found "+openParenMatch.found.type+" at " openParenMatch.found.line+":"+openParenMatch.found.column+"Will attempt to continue parsing");
+		//errorCount++;
+		//errors.push(new B_error("B_printState", "T_openParen", openParenMatch, 1));
+	}
+	else
+		index++; //skip the open paren
+	
+	var exprParse = parseExpr(index);
+	index+= exprParse.size;
+	
+	var closeParenMatch = matchToken("T_closeParen", index);
 	index++;
-	    if(printMatch.type != "T_errorP")
-	    {
-			errorDepth++;
-			var openParenMatch = matchToken("T_openParen", index);
-			index++;
-			if(openParenMatch.type != "T_errorP")
-			{
-				errorDepth++;
-				var exprParse = parseExpr(index);
-				index+= exprParse.size;
-				if(exprParse.type != "B_error")
-				{
-					errorDepth++;
-					var closeParenMatch = matchToken("T_closeParen", index);
-					index++;
-					if(closeParenMatch.type != "T_errorP") //This is a working print statement
-					{
-						result = new B_printState(index-startIndex, exprParse);
-					}
-					else //Not a match
-						result =new B_error("B_printState", closeParenMatch, errorDepth);
-				}
-				else //Not a match
-					result =new B_error("B_printState", exprParse, errorDepth);
-			}
-			else //Not a match
-				result =new B_error("B_printState", openParenMatch, errorDepth);
-		}
-		else //Not a match
+	if(closeParenMatch.type =="T_errorP"))//The next token is not a close paren. Look for the next close paren and throw out anything in between
+	{
+		putMessage("Error: Expected a close parenthesis after the statement. Found "+closeParenMatch.found.type+" at "+closeParenMatch.found.line+":"closeParenMatch.found.column);
+		errorCount++;
+		errors.push(new B_error("B_printState", "T_closeParen", closeParenMatch, 1));
+		
+		var nextClose = findNext("T_closeParen",index);
+		if(nextClose != -1)
 		{
-			var temp = new B_error("B_printState", printMatch, errorDepth);
-			putMessage("Got here");
-			result = temp
+			putMessage("   Found a close parenthesis at"+tokens[nextClose].line+ ":"+tokens[nextClose].column+". Will resume parsing from there");
+			index = nextClose+1;
 		}
+		else //There are no more close parens
+		{
+			putMessage("   Did not find a close paren for print statement. Will resume parsing from"+" at "+closeParenMatch.found.line+":"+closeParenMatch.found.column);
+		}
+	}
 	
+	result = new B_printState(index-startIndex, exprParse);
 	
 	if(verb)
 	{
-		if(result.type == "B_error")
-			putMessage("Not a print statement");
-		else
+		//if(result.type == "B_error")
+		//	putMessage("Not a print statement");
+		//else
 			putMessage("Print statement parsed");
 	}
 	
@@ -196,7 +190,7 @@
 	return result;
 }
 
-
+/*
     function parseIdState(index)
     {
 	levelIn++;
@@ -204,56 +198,76 @@
 		putMessage("Attempting to parse id assignment statement");
 	    
 	var result;
-	var errorDepth = 0;
 	var startIndex = index;
+	var validId = false;
 	    
 	var idParse= parseId(index);
 	index+= idParse.size;
-	if(idParse.type != "B_error")
+	if(idParse.type == "B_error") // This was not a valid id
 	{
-		errorDepth++;
-		var equalMatch = matchToken("T_equal", index);
-		index++;
-		if(equalMatch.type != "T_errorP")
-		{
-			errorDepth++;
-			var exprParse = parseExpr(index);
-			index+= exprParse.size;
-			if(exprParse.type != "B_error")//This is a working id statement
-			{
-				errorDepth++;
-				var ident = idParse.idT.inside;
-				var value = exprParse
-
-				if(symTable.hasItem(ident))
-				{
-					var existingVar = symTable.getItem(ident); //Retrieve the existing symbol defition to not overwrite it
-					existingVar.value = value; //Set the new value
-					symTable.setItem(ident, existingVar); //Put the symbol back in the table
-				}
-				else //This is a previously unseen variable, needs to be created
-				{
-					var newVar = new variable(undefined, value);
-					symTable.setItem(ident, newVar); //Put the new symbol back in the table
-				}
-				result = (new B_idState(index-startIndex,
-									idParse,
-									exprParse));
-			}
-			else //Not a match
-				result =new B_error("B_idState", exprParse, errorDepth);
-		}
-		else //Not a match
-			result =new B_error("B_idState", equalMatch, errorDepth);
+		putMessage("Error: Expected a user id. Found "+idParse.found.type+"at "+idParse.found.line+":"+idParse.found.column+". Will attempt to continue parsing");
+		errorCount++;
+		errors.push(new B_error("B_idState", "T_userId", idParse, idParse.size));
 	}
-	else //Not a match
-		result =new B_error("B_idState", idParse, errorDepth);
+	else
+		validId = true;
+	var equalMatch = matchToken("T_equal", index);
+	index++;
+	if(equalMatch.type == "T_errorP") //Equal sign is not present
+	{
+		putMessage("Error: Expected an equal sign after the user id. Found "+equalMatch.found.type+"at "+equalMatch.found.line+":"+equalMatch.found.column);
+		errorCount++;
+		errors.push(new B_error("B_printState", "T_closeParen", equalMatch, 1));
+		
+		var nextEqual = findNext("T_equal",index);
+		if(nextEqual != -1)
+		{
+			putMessage("   Found an equal sign at"+tokens[nextEqual].line+ ":" tokens[nextEqual].column". Will resume parsing from there");
+			index = nextEqual+1;
+		}
+		else //There are no more equal signs
+		{
+			putMessage("   Did not find an equal sign for the variable assignment. Will assume equal sign was forgotten");
+		}
+	}
+	
+	var exprParse = parseExpr(index);
+	index+= exprParse.size;
+	if(exprParse.type == "B_error")//This is not a valid expr
+	{
+		putMessage("Error: Expected an expression on the other side of the equal sign. Found "+exprParse.found.type+"at "+exprParse.found.line+":"+exprParse.found.column+". Will attempt to continue parsing");
+		errorCount++;
+		errors.push(new B_error("B_idState", "B_expr", exprParse, exprParse.size));
+	}
+	else if(validID) //There is a valid id and expr, attempt to go through with the assignment
+	{
+		var ident = idParse.idT.inside;
+		var value = exprParse;
+		if(symTable.hasItem(ident))
+		{
+			var existingVar = symTable.getItem(ident); //Retrieve the existing symbol defition to not overwrite it
+			existingVar.value = value; //Set the new value
+			symTable.setItem(ident, existingVar); //Put the symbol back in the table
+		}
+		else //This is a previously unseen variable, cannot be assigned until it is declared
+		{
+			putMessage("Found undeclared variable assignment at " + idParse.line +":" +idParse.column);
+			errors.push(new B_error("B_idState", "Declared user id", idParse, idParse.size));
+			errorCount++;
+			//var newVar = new variable(undefined, value);
+			//symTable.setItem(ident, newVar); //Put the new symbol back in the table
+		}
+	}
+	
+	result = (new B_idState(index-startIndex,
+							idParse,
+							exprParse));
 	
 	if(verb)
 	{
-		if(result.type == "B_error")
-			putMessage("Not an id assignment statement");
-		else
+		//if(result.type == "B_error")
+		//	putMessage("Not an id assignment statement");
+		//else
 			putMessage("Id assignment parsed");
 	}
 	    
@@ -269,49 +283,56 @@ function parseVarDecl(index)
 		putMessage("Attempting to parse variable declaration");
     
 	var result;
-	var errorDepth = 0;
 	var startIndex = index;
+	var validId = false;
 	    
 	    
 	var typeMatch = matchToken("T_type", index);
 	index++;
-	if(typeMatch.type != "T_errorP")
+	if(typeMatch.type == "T_errorP")
 	{
-		errorDepth++;
-		var idParse = parseId( index);
-		index+= idParse.size;
-		if(idParse.type != "B_error")//This is a working variable declaration
-		{
-			var ident = idParse.idT.inside
-			var type = typeMatch.inside
-			
-			if(symTable.hasItem(ident))
-			{
-				var existingVar = symTable.getItem(ident); //Retrieve the existing symbol defition to not overwrite it
-				existingVar.type = type; //Set the new value
-				symTable.setItem(ident, existingVar); //Put the symbol back in the table
-			}
-			else //This is a previously unseen variable, needs to be created
-			{
-				var newVar = new variable(type, "");
-				symTable.setItem(ident, newVar); //Put the new symbol back in the table
-			}
-			
-			result = (new B_varDecl(index-startIndex,
-								typeMatch,
-								idParse));
-		}
-		else //Not a match
-			result =new B_error("B_varDecl", idParse, errorDepth);
+		putMessage("Error: Expected a var type. Found "+typeMatch.found.type+"at "+typeMatch.found.line+":"+typeMatch.found.column+". Will attempt to continue parsing");
+		errorCount++;
+		errors.push(new B_error("B_varDecl", "T_type", typeMatch, typeMatch.size));
 	}
-	else //Not a match
-		result =new B_error("B_idState", typeMatch, errorDepth);
-
+	else
+		validId = true;
+		
+	var idParse = parseId( index);
+	index+= idParse.size;
+	if(idParse.type == "B_error") // This was not a valid id
+	{
+		putMessage("Error: Expected a user id. Found "+idParse.found.type+"at "+idParse.found.line+":"+idParse.found.column". Will attempt to continue parsing");
+		errorCount++;
+		errors.push(new B_error("B_varDecl", "T_userId", idParse, idParse.size));
+	}
+	else if(validId) // this is a valid variable declaration. Add to the symbol table
+	{
+		var ident = idParse.idT.inside
+		var type = typeMatch.inside
+			
+		if(symTable.hasItem(ident))
+		{
+			var existingVar = symTable.getItem(ident); //Retrieve the existing symbol defition to not overwrite it
+			existingVar.type = type; //Set the new value
+			symTable.setItem(ident, existingVar); //Put the symbol back in the table
+		}
+		else //This is a previously unseen variable, needs to be created
+		{
+			var newVar = new variable(type, "");
+			symTable.setItem(ident, newVar); //Put the new symbol back in the table
+		}
+	}
+			
+	result = (new B_varDecl(index-startIndex,
+						typeMatch,
+						idParse));
+	
 	if(verb)
 	{
-		if(result.type == "B_error")
-			putMessage("Not a variable declaration");
-		else
+		//if(result.type == "B_error")
+		//	putMessage("Not a variable declaration");
+		//else
 			putMessage("Variable declaration  parsed");
 	}
 	
@@ -327,40 +348,32 @@ function parseStatementListState(index)
 		putMessage("Attempting to parse statement list statement");
 	    
 	var result;
-	var errorDepth = 0;
 	var startIndex = index;
-	
-	var openSBracketMatch = matchToken("T_openSBracket", index);
-	index++;
-	if(openSBracketMatch.type != "T_errorP")
+	index++; //skip the open squiggly bracket that has already been read
+	var nextClose = findNext("T_closeSBracket",index);
+	    
+	var statementListParse;
+	if(nextClose != -1)
 	{
-		errorDepth++;
-		var statementListParse = parseStatementList(index);
+		statementListParse = parseStatementList(index, nextClose);
 		index+= statementListParse.size;
-		if(statementListParse.type != "B_error")
-		{
-			errorDepth++;
-			var closeSBracketMatch = matchToken("T_closeSBracket", index);
-			index++;
-			if(closeSBracketMatch.type != "T_errorP")//This is a working statement list statement
-			{
-				statementListParse.size = (index-startIndex); // Account for the closing SBracket
-				result = statementListParse;
-			}
-			else //Not a match
-				result =new B_error("B_statementListState", closeSBracketMatch, errorDepth);
-		}
-		else //Not a match
-			result =new B_error("B_statementListState", statementListParse, errorDepth);
+	else //There are no more close parens
+	{
+		putMessage("Error: Did not find a close Sbracket for statement list. Will assume it was forgotten");
+		statementListParse = parseStatementList(index, tokens.length-2); //Treat the rest of the program as a statementlist except for the EOF token
+		index+= statementListParse.size;
+		errorCount++;
+		errors.push(new B_error("B_statementListState", "T_closeSBracket", tokens[index], 1));
 	}
-	else //Not a match
-		result =new B_error("B_statementListState", openSBracketMatch, errorDepth);
-
+		
+	statementListParse.size = (index-startIndex);
+	result = statementListParse;
+			
 	if(verb)
 	{
-		if(result.type == "B_error")
-			putMessage("Not a statement list statement");
-		else
+		//if(result.type == "B_error")
+		//	putMessage("Not a statement list statement");
+		//else
 			putMessage("Statement list statement parsed");
 	}
 	    
@@ -368,52 +381,46 @@ function parseStatementListState(index)
 	return result;
     }
 
-function parseStatementList(index)
+function parseStatementList(index, end)
     {
 	levelIn++;
 	if(verb)
 		putMessage("Attempting to parse statement list");
 	    
 	var result;
-	var errorDepth = 0;
 	var startIndex = index;
 	
-	var epsilonMatch = matchToken("T_epsilon", index);
-	if(epsilonMatch.type != "T_errorP") //The current token is epsilon
-	{
-		result = new B_statementList(0,"","");
-		tokens.splice(index,1); //Delete the epsilon for indexing purposes
-		index++;
-	}
-	else
+	if(index != end) //The list hasn't been fully parsed
 	{
 		if(verb)
 			putMessage("List is not empty");
+		
 		var statementParse = parseStatement(index);
 		index+= statementParse.size;
-		if(statementParse.type != "B_error")
+		if(statementParse.type == "B_error")// This code is not a statement. Try to parse the rest of the list
 		{
-			errorDepth++;
-			var statementListParse = parseStatementList(index);
-			index+= statementListParse.size;
-			if(statementListParse.type != "B_error") //This is a working statement list
-			{
-				result = (new B_statementList(index-startIndex,
-										statementParse,
-										statementListParse));
-			}
-			else //Not a match
-				result =new B_error("B_statementList", statementListParse, errorDepth+statementListParse.depth);//depth is increased for each recursive call
+			putMessage("Error: Expected a statement as part of a statement list. Found "+statementParse.found.type+" at "+statementParse.found.line+":"+statementParse.found.column);
+			errorCount++;
+			errors.push(new B_error("B_statementList", "B_statement", statementParse, statementParse.size));
 		}
-		else //Not a match
-			result =new B_error("B_statementList", statementParse, errorDepth);
+		
+		var statementListParse = parseStatementList(index, end);
+		index+= statementListParse.size;
+		if(statementListParse.type == "B_error") //This is not a valid statement list. Leave this reccursive madness!
+		{
+			result = new B_error("B_statementList", "B_statementList", statementListParse, statementListParse.size);
+		}
+		else //The recursion gives us something valid
+			result = (new B_statementList(index-startIndex,
+									statementParse,
+									statementListParse));
 	}
 	
 	if(verb)
 	{
-		if(result.type == "B_error")
-			putMessage("Not a statement list");
-		else
+		//if(result.type == "B_error")
+		//	putMessage("Not a statement list");
+		//else
 			putMessage("Statement list parsed");
 	}
 	    
@@ -427,35 +434,27 @@ function parseExpr(index)
 	levelIn++;
 	if(verb)
 		putMessage("Attempting to parse expression");
-	
 	var result;
-	intExprParse = parseIntExpr(index);
-	if(intExprParse.type != "B_error") //There is a working int expression match
-	{
-		result = intExprParse;
+	    
+	//Try to parse
+	currToken = tokens[index];
+	switch(currToken.type){
+		case "T_digit":
+			result = parseIntExpr(index);
+			break;
+		case "T_qoute":
+			result = parseCharExpr(index);
+			break;
+		case "T_userId":
+			result = parseId(index);
+			break;
+		default: //None of those matched
+			putMessage("Error: Expected the start to an expr at " +currToken.line+ ":" +currToken.column+". Found " +currToken.type +". Will skip.")
+			errorCount++;
+			errors.push(new B_error("B_expr", "Start to an expr ", currToken, 1));
+			result = parseExpr(index+1);
+			break;
 	}
-	else 
-	{
-	    charExprParse = parseCharExpr(index);
-	    if(charExprParse.type != "B_error") //There is a working char expression match
-	   {
-		result = charExprParse;
-	   }
-	else
-	   {
-	   var idParse = parseId(index);
-	    if(idParse.type != "B_error") //There is a working id match
-	    {
-		result = idParse;
-	    }
-	else //nothing matches
-	{
-		var errors = [intExprParse,charExprParse,idParse];
-		var likely = errorDepthAnalysis(errors);
-		result = new B_error("B_expr", likely, likely.depth);
-	}
-
-	}}
 	
 	if(verb)
 	{
@@ -477,25 +476,38 @@ function parseExpr(index)
 		putMessage("Attempting to parse int expression");
 	
 	var result;
+	var startIndex = index;
 	
-	intExprWOpParse = parseIntExprWOp(index);
-	if(intExprWOpParse.type != "B_error") //There is a working int expression with operator match
+	var digitMatch = matchToken("T_digit",index);
+	index++;
+	var opMatch = matchToken("_op", index);
+	index++;
+	    
+	if(digitMatch.type == "T_errorP") //Found something other than a digit. Skip
 	{
-		result = (new B_intExpr(intExprWOpParse.size,intExprWOpParse));
+		putMessage("Error: Expected a digit as part of an int expression. Found "+digitMatch.found.type+" at "+digitMatche.found.line+":"+digitMatch.found.column+". Will skip");
+		errorCount++;
+		errors.push(new B_error("B_intExpr", "T_digit", digitMatch, digitMatch.size));
+		result = parseIntExpr(index+1);
 	}
-	else
+	else if(opMatch.type != "T_errorP")//found a digit with an operator
 	{
-		digitMatch = matchToken("T_digit",index);
-		if(digitMatch.type != "T_errorP") //There is a digit, and thus a match
+		var exprParse = parseExpr(index);
+		index+= exprParse.size;
+		if(exprParse.type == "B_error")//This is not a valid expr
 		{
-				result = (new B_intExpr(1,digitMatch));
+			putMessage("Error: Expected an expression on the other side of the operator. Found "+exprParse.found.type+"at "+exprParse.found.line+":"+exprParse.found.column+". Will attempt to continue parsing");
+			errorCount++;
+			errors.push(new B_error("B_intExprWOp", "B_expr", exprParse, exprParse.size));
 		}
-		else //nothing matches
-		{
-			var errors = [intExprWOpParse,digitMatch];
-			var likely = errorDepthAnalysis(errors);
-			result = new B_error("B_intExpr", likely, likely.depth);
-		}
+		result = (new B_intExprWOp(index-startIndex,
+									digitMatch,
+									opMatch,
+									exprParse))
+	}
+	else //Found a digit with no operator following it
+	{
+		result = (new B_intExpr(1,digitMatch));
 	}
 	
 	if(verb)
@@ -510,57 +522,6 @@ function parseExpr(index)
 	return result;
     }
     
-
-function parseIntExprWOp(index)
-    {
-	levelIn++;
-	if(verb)
-		putMessage("Attempting to parse int expression with an operator");
-	    
-	var result;
-	var errorDepth = 0;
-	var startIndex = index;
-	    
-	var digitMatch = matchToken("T_digit", index);
-	index++;
-	if(digitMatch.type != "T_errorP")
-	{
-		errorDepth++;
-		var opMatch = matchToken("_op", index);
-		index++;
-		if(opMatch.type != "T_errorP")
-		{
-			errorDepth++;
-			var exprParse = parseExpr(index);
-			index+= exprParse.size;
-			if(exprParse.type != "B_error") //There is a working int expression with operator match
-			{
-				result = (new B_intExprWOp(index-startIndex,
-									digitMatch,
-									opMatch,
-									exprParse));
-			}
-			else //Not a match
-				result =new B_error("B_intExprWOp", exprParse, errorDepth);
-		}
-		else //Not a match
-			result =new B_error("B_intExprWOp", opMatch, errorDepth);
-	}
-	else //Not a match
-		result =new B_error("B_intExprWOp", digitMatch, errorDepth);
-
-	if(verb)
-	{
-		if(result.type == "B_error")
-			putMessage("Not an int expression with operator");
-		else
-			putMessage("Int expression with operator parsed");
-	}
-	
-	levelIn--;
-	return result;
-    }
-    
     
     function parseCharExpr(index)
     {
@@ -569,49 +530,42 @@ function parseIntExprWOp(index)
 		putMessage("Attempting to parse char expression");
     
 	var result;
-	var errorDepth = 0;
 	var startIndex = index;
+	index++; //skip the open qoute that has already been read
 	    
-	var openQouteMatch = matchToken("T_qoute", index);
-	index++;
-	if(openQouteMatch.type != "T_errorP")
+	var nextQoute = findNext("T_qoute", index);
+	    
+	var charExprParse;
+	if(nextQoute != -1)
 	{
-		errorDepth++;
-		var charListParse = parseCharList(index);
-		index+= charListParse.size;
-		if(charListParse.type != "B_error")
-		{
-			errorDepth++;
-			var closeQouteMatch = matchToken("T_qoute", index);
-			index++;
-			if(closeQouteMatch.type != "T_errorP") //This is a valid character expression
-			{
-				charListParse.size = index-startIndex; //Account for the surrounding qoutes
-				result = charListParse;
-			}
-			else //Not a match
-				result =new B_error("B_charListExpr", closeQouteMatch, errorDepth);
-		}
-		else //Not a match
-			result =new B_error("B_charListExpr", charListParse, errorDepth);
+		charExprParse = parseStatementList(index, nextQoute);
+		index+= charExprParse.size;
+	else //There are no more qoutes
+	{
+		putMessage("Error: Did not find a close qoute for char list. Will assume it was forgotten");
+		charExprParse = parseCharList(index, tokens.length-2); //Treat the rest of the program as a char list except for the EOF token
+		index+= charExprParse.size;
+		errorCount++;
+		errors.push(new B_error("B_charExpr", "T_qoute", tokens[index], 1));
 	}
-	else //Not a match
-		result =new B_error("B_charListExpr", openQouteMatch, errorDepth);
-
+		
+	charExprParse.size = (index-startIndex);
+	result = charExprParse;
+			
 	if(verb)
 	{
-		if(result.type == "B_error")
-			putMessage("Not a char expression");
-		else
-			putMessage("Char expression parsed");
+		//if(result.type == "B_error")
+		//	putMessage("Not a statement list statement");
+		//else
+			putMessage("Char Expression parsed");
 	}
-	
-	levelIn--;
+	    
+	levelIn--
 	return result;
     }
     
     
-function parseCharList(index)
+function parseCharList(index, end)
     {
 	levelIn++;
 	if(verb)
@@ -621,35 +575,30 @@ function parseCharList(index)
 	var errorDepth = 0;
 	var startIndex = index;
 
-	var qouteMatch = matchToken("T_epsilon", index);
-	if(qouteMatch.type != "T_errorP") //The current token is epsilon
-	{
-		result = new B_charList(0,"","");
-		tokens.splice(index,1); //Delete the epsilon for indexing purposes
-		index++;
-	}
-	else
+	if(index != end) //The list hasn't been fully parsed
 	{
 		if(verb)
 			putMessage("List is not empty");
+		
 		var charMatch = matchToken("T_char", index);
 		index++;
-		if(charMatch.type != "T_errorP")
+		if(charMatch.type != "T_errorP")// This is not a valid char. Try to parse the rest of the list
 		{
-			errorDepth++
-			var charListParse = parseCharList(index);
-			index+= charListParse.size;
-			if(charListParse.type != "B_error") //This is a working char list
-			{
-				result = (new B_charList(index-startIndex,
+			putMessage("Error: Expected a char as part of a char list. Found "+charMatch.found.type+" at "+charMatch.found.line+":"+charMatch.found.column);
+			errorCount++;
+			errors.push(new B_error("B_charList", "T_char", charMatch, charMatch.size));
+		}
+		
+		var charListParse = parseCharList(index, end);
+		index+= charListParse.size;
+		if(statementListParse.type == "B_error") //This is not a valid statement list. Leave this reccursive madness!
+		{
+			result = new B_error("B_charList", "B_charList", charListParse, charListParse.size);
+		}
+		else //The recursion gives us something valid
+			result = (new B_charList(index-startIndex,
 									charMatch,
 									charListParse));
-			}
-			else //Not a match
-				result =new B_error("B_charList", charListParse, errorDepth+charListParse.depth);//depth is increased for each recursive call
-		}
-		else //Not a match
-			result =new B_error("B_charList", charMatch, errorDepth);//depth is increased for each recursive call
 	}
 	
 	if(verb)
@@ -664,6 +613,7 @@ function parseCharList(index)
 	return result;
     }
 
+    
 function parseId(index)
     {
 	levelIn++;
@@ -671,13 +621,12 @@ function parseId(index)
 	    putMessage("Attempting to parse an id");
 	    
 	var result;
-	var startIndex = index;
-	    
 	var charMatch = matchToken("T_userId", index);
 	if(charMatch.type != "T_errorP") // This is a valid type
-		result = (new B_id(1, charMatch));
+		result = new B_id(1, charMatch);
 	else //Not a match
-		result =new B_error("B_id", charMatch, 0);
+	    {
+		result =new B_error("B_id", "T_userId", charMatch, 1);
 
 	if(verb)
 	{
@@ -691,6 +640,8 @@ function parseId(index)
 	return result;
     }
 
+   */ 
+//Utilities
     function matchToken(type, index)
     {
 	levelIn++;
@@ -722,18 +673,20 @@ function parseId(index)
 	
 	levelIn--;
 	return result;
-	    
     }
     
-    function errorDepthAnalysis(errors)
+    function findNext(searchType, index)
     {
-	var deepest = errors[0]
-	for(var i=1;i<errors.length;i++)
-	    {
-		if(errors[i].depth>deepest.depth)
-		    deepest = errors[i];
-	    }
-	return deepest;
+	var location = -1;
+	var i = index;
+	while(i<tokens.length && location ==-1)
+	{
+		if(tokens[i].type == searchType)
+		{
+			location = i
+		}
+		i++;
+	}
     }
     
 
@@ -809,12 +762,12 @@ function B_id(size, idT)
 	this.type ="B_id";
    }
    
-function B_error(step, block, depth)
+function B_error(step, expected, found, size)
    {
 	this.step = step
-	this.block = block;
-	this.depth = depth;
-	this.size = -1;
+	this.expected = expected;
+	this.found = found;
+	this.size = size;
 	this.type ="B_error";
    }
     
@@ -1032,5 +985,57 @@ function errorHandlerHelper(tree, indent)
 	}
 }
 
+
+
+/*
+function parseIntExprWOp(index)
+    {
+	levelIn++;
+	if(verb)
+		putMessage("Attempting to parse int expression with an operator");
+	    
+	var result;
+	var errorDepth = 0;
+	var startIndex = index;
+	    
+	var digitMatch = matchToken("T_digit", index);
+	index++;
+	if(digitMatch.type != "T_errorP")
+	{
+		errorDepth++;
+		var opMatch = matchToken("_op", index);
+		index++;
+		if(opMatch.type != "T_errorP")
+		{
+			errorDepth++;
+			var exprParse = parseExpr(index);
+			index+= exprParse.size;
+			if(exprParse.type != "B_error") //There is a working int expression with operator match
+			{
+				result = (new B_intExprWOp(index-startIndex,
+									digitMatch,
+									opMatch,
+									exprParse));
+			}
+			else //Not a match
+				result =new B_error("B_intExprWOp", exprParse, errorDepth);
+		}
+		else //Not a match
+			result =new B_error("B_intExprWOp", opMatch, errorDepth);
+	}
+	else //Not a match
+		result =new B_error("B_intExprWOp", digitMatch, errorDepth);
+
+	if(verb)
+	{
+		if(result.type == "B_error")
+			putMessage("Not an int expression with operator");
+		else
+			putMessage("Int expression with operator parsed");
+	}
 	
+	levelIn--;
+	return result;
+    }
+    */
 	

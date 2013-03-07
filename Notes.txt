@@ -1,0 +1,2 @@
+-Dont add value until type decl has been achieved
+-Recurrsive functions should make sure they dont walk off the end
